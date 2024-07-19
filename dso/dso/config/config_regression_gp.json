@@ -6,13 +6,13 @@
       // This can either be (1) the name of the benchmark dataset (see
       // benchmarks.csv for a list of supported benchmarks) or (2) a path to a
       // CSV file containing the data.
-      "dataset" : "Nguyen-1",
+      "dataset" : "Nguyen-2",
 
       // To customize a function set, edit this! See functions.py for a list of
       // supported functions. Note "const" will add placeholder constants that
       // will be optimized within the training loop. This will considerably
       // increase runtime.
-      "function_set": ["add", "sub", "mul", "div", "sin", "cos", "exp", "log"],
+      "function_set": ["add", "sub", "mul", "div", "sin", "cos", "exp", "log", "const"],
 
       // Metric to be used for the reward function. See regression.py for
       // supported metrics.
@@ -71,16 +71,17 @@
    },
    
    // Hyperparameters related to genetic programming hybrid methods.
+   // another 0 in pop_size, generations, train_n
    "gp_meld" : {
       "run_gp_meld" : true,
-      "population_size" : 100,
-      "generations" : 20,
+      "population_size" : 10,
+      "generations" : 2,
       "crossover_operator" : "cxOnePoint",
       "p_crossover" : 0.5,
       "mutation_operator" : "multi_mutate",
       "p_mutate" : 0.5,   
       "tournament_size" : 5,
-      "train_n" : 50,
+      "train_n" : 5,
       "mutate_tree_max" : 3,
       "verbose" : false,
       // Speeds up processing when doing expensive evaluations.
@@ -94,7 +95,7 @@
       "epsilon" : 0.02,
       // Recommended to set this to as many cores as you can use! Especially if
       // using the "const" token.
-      "n_cores_batch" : -1
+      "n_cores_batch" : 1
    },
 
    // Only the key RNN controller hyperparameters are listed here. See

@@ -13,12 +13,198 @@ from dso.utils import empirical_entropy, get_duration, weighted_quantile, pad_ac
 from dso.memory import Batch, make_queue
 from dso.variance import quantile_variance
 
+
+####### imports needed for integration #######
+from dso.program import from_str_tokens
+from dso.engine import *
+##############################################
+
 # Ignore TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Set TensorFlow seed
 tf.set_random_seed(0)
+
+
+
+
+
+########## code to support TensorGP expression conversion ################
+
+def print_tree(expr, dep=0):
+    indent = " " * 2 * dep
+    prim = str(expr) if (len(expr.args) == 0) else expr.func.__name__
+    print(indent + prim)
+    for children in expr.args:
+        print_tree(children, dep + 1)
+
+
+def is_numeric(string):
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
+def handle_special_cases(string):
+    if string == "mul":
+        return "mult"
+    return string
+
+
+def arity_overflow(string, nargs):
+    if string in ["mult", "add", "sub", "div", "and", "or", "min", "max", "xor"] and (nargs > 2):
+        return True
+    return False
+
+
+def convert_to_gp_str(expr):
+    num_args = len(expr.args)
+
+    if num_args == 0:
+        str_expr = str(expr)
+        if is_numeric(str_expr):
+            str_node = "scalar(" + str(float(str_expr)) + ")"
+        else:
+            str_node = str_expr.lower()
+    else:
+        str_node = handle_special_cases(expr.func.__name__.lower())
+
+    str_acc = str_node
+
+    if num_args > 0:
+
+        if not arity_overflow(str_node, num_args):
+            str_acc += "("
+            for i, children in enumerate(expr.args):
+                str_acc += convert_to_gp_str(children)
+                str_acc += ", " if (i < num_args - 1) else ""
+            str_acc += ")"
+        else:
+            str_acc += "("
+            for i, children in enumerate(expr.args[num_args - 2: num_args]):
+                str_acc += convert_to_gp_str(children)
+                str_acc += ", " if (i < 1) else ""
+            str_acc += ")"
+            i = num_args - 2
+            while i > 0:
+                i -= 1
+                str_acc = str_node + "(" + convert_to_gp_str(expr.args[i]) + ", " + str_acc + ")"
+
+    return str_acc
+
+
+def convert_gp_to_sympy(node, sub_div=False):
+    """Adjusts trees to only use node values supported by sympy"""
+
+    if node.terminal:
+        if node.value == "scalar":
+            node.value = float(node.children[0])
+            node.children = []
+    else:
+
+        if (node.value == "div") and sub_div:
+            node.value = "Mul"
+            new_right = Node("Pow", [], False)
+            new_right.children.append(node.children[1])
+            new_right.children.append(Node("-1", [], True))
+            node.children[1] = new_right
+
+        elif node.value == "sub":
+            node.value = "Add"
+            new_right = Node("Mul", [], False)
+            new_right.children.append(node.children[1])
+            new_right.children.append(Node("-1", [], True))
+            node.children[1] = new_right
+
+        elif node.value == "neg":
+            node.value = Node("Mul", [], False)
+            node.children.append(Node("-1", [], True))
+        node.terminal = False
+
+        if node.value == "mult":
+            node.value = "Mul"
+        elif node.value in ["add"]:
+            node.value = node.value.capitalize()
+
+    for child in node.children:
+        convert_gp_to_sympy(child, sub_div=sub_div)
+
+    return node
+
+
+def pow_clear(node):
+    node_to_change = None
+    if not node.terminal:
+        if node.value == "Mul":
+            c1 = node.children[0].value
+            c2 = node.children[1].value
+            if c2 == "pow":
+                p_c1 = node.children[1].children[0].value
+                p_c2 = node.children[1].children[1].value
+                if p_c1 == -1.0:
+                    node_to_change = node.children[1].children[1]
+                elif p_c2 == -1.0:
+                    node_to_change = node.children[1].children[0]
+                if node_to_change is not None:
+                    node.value = "div"
+                    node.children[1] = node_to_change
+            elif c1 == "pow":
+                p_c1 = node.children[0].children[0].value
+                p_c2 = node.children[0].children[1].value
+                if p_c1 == -1.0:
+                    node_to_change = node.children[0].children[1]
+                elif p_c2 == -1.0:
+                    node_to_change = node.children[0].children[0]
+                if node_to_change is not None:
+                    node.value = "div"
+                    node.children[0] = node_to_change
+    for child in node.children:
+        pow_clear(child)
+    return node
+
+
+"""
+if node.value == "mult":
+    c1 = node.children[0].value
+    c2 = node.children[1].value
+    if (c1 == "mult" and c2 == "pow"):
+        p_c1 = node.children[1].children[0].value
+        p_c2 = node.children[1].children[1].value
+        if p_c1 == "scalar":
+            ind_n = 0
+        else p_c2 == "-1":
+
+
+    elif(c2 == "mult" and c1 == "pow"):
+"""
+
+
+
+def get_str_tokens(node, data=None):
+    if data is None:
+        data = []
+    if node.terminal:
+        if node.value == "x":
+            to_add = "x1"
+        elif node.value == "y":
+            to_add = "x2"
+        else:
+            to_add = node.value
+    else:
+        to_add = node.value.lower()
+    data.append(to_add)
+    if not node.terminal:
+        for children in node.children:
+            get_str_tokens(children, data)
+    return data
+
+#########################################################################
+
+
+
 
 
 # Work for multiprocessing pool: compute reward
@@ -127,6 +313,9 @@ class Trainer():
 
 
         """
+
+
+        n_cores_batch = 1
         self.sess = sess
         # Initialize compute graph
         self.sess.run(tf.global_variables_initializer())
@@ -257,8 +446,15 @@ class Trainer():
 
         self.nevals += self.batch_size + n_extra
 
+
+
         # Run GP seeded with the current batch, returning elite samples
-        if self.gp_controller is not None:
+        #self.gp_controller = None
+        #if self.gp_controller is not None:
+        
+        do_old_code = True
+        if do_old_code:
+
             deap_programs, deap_actions, deap_obs, deap_priors = self.gp_controller(actions)
             self.nevals += self.gp_controller.nevals
 
@@ -277,6 +473,7 @@ class Trainer():
             actions = np.append(actions, deap_actions, axis=0)
             obs = np.append(obs, deap_obs, axis=0)
             priors = np.append(priors, deap_priors, axis=0)
+
 
         # Compute rewards in parallel
         if self.pool is not None:

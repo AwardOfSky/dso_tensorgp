@@ -86,12 +86,17 @@ def from_str_tokens(str_tokens, skip_cache=False):
             if s in Program.library.names:
                 t = Program.library.names.index(s.lower())
             elif U.is_float(s):
+                if s == "-1.0":
+                    print(float(s))
+                    print(Program.library.const_token)
                 assert "const" not in str_tokens, "Currently does not support both placeholder and hard-coded constants."
-                t = Program.library.const_token
+                #t = Program.library.const_token
+                t = "const"
                 constants.append(float(s))
             else:
                 raise ValueError("Did not recognize token {}.".format(s))
             traversal.append(t)
+        print(traversal)
         traversal = np.array(traversal, dtype=np.int32)
     else:
         raise ValueError("Input must be list or string.")
@@ -484,11 +489,38 @@ class Program(object):
         tree = self.traversal.copy()
         tree = build_tree(tree)
         tree = convert_to_sympy(tree)
+        #print(tree)
         try:
             expr = U.parse_expr(tree.__repr__()) # SymPy expression
         except:
             expr = tree.__repr__()
         return expr
+
+
+    # modified for tensorGP integration
+    def sympy_expr_i(self, sub_div=True, sub_sub = False):
+        """
+        Returns the attribute self.sympy_expr.
+
+        This is actually a bit complicated because we have to go: traversal -->
+        tree --> serialized tree --> SymPy expression
+        """
+
+        tree = self.traversal.copy()
+        #print("tree1", tree)
+        tree = build_tree(tree)
+        #print("tree2", tree)
+        #tree = convert_to_sympy(tree)
+        #print("tree3", tree)
+        #try:
+        #    expr = U.parse_expr(tree.__repr__()) # SymPy expression
+        #except:
+        #    expr = tree.__repr__()
+        #return expr
+        
+        return tree.__repr__()
+        
+
 
     def pretty(self):
         """Returns pretty printed string of the program"""
@@ -559,17 +591,18 @@ def build_tree(traversal):
     return node
 
 
-def convert_to_sympy(node):
+def convert_to_sympy(node, sub_div=True, sub_sub=True):
     """Adjusts trees to only use node values supported by sympy"""
 
-    if node.val == "div":
+    if (node.val == "div") and sub_div:
         node.val = "Mul"
         new_right = Node("Pow")
         new_right.children.append(node.children[1])
         new_right.children.append(Node("-1"))
         node.children[1] = new_right
 
-    elif node.val == "sub":
+
+    elif node.val == "sub" and sub_sub:
         node.val = "Add"
         new_right = Node("Mul")
         new_right.children.append(node.children[1])
@@ -597,6 +630,6 @@ def convert_to_sympy(node):
         node.children.append(Node("4"))
 
     for child in node.children:
-        convert_to_sympy(child)
+        convert_to_sympy(child, sub_div=sub_div, sub_sub=sub_sub)
 
     return node

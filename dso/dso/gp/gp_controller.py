@@ -184,10 +184,21 @@ class GPController:
     def get_hof_programs(self):
         """Compute actions, parents, siblings, and priors of hall of fame."""
         hof = self.hof
-        L = Program.library.L
-        
+
         # Recheck maximum lengths
         self.max_length = max(max([len(ind) for i, ind in enumerate(hof)]), self.max_length)
+
+        print("type of hof[0]", type(self.hof[0]))
+        print("type of hof[0].update", type(self.hof[0].update_tree_repr()))
+        self.hof[0].update_tree_repr()
+        print("\nupdate\n ", self.hof[0])
+        print("\nupdate padded\n ", U.DEAP_to_padded_tokens(self.hof[0], self.max_length))
+        
+        exit(0)
+
+        L = Program.library.L
+        
+        
 
         actions = np.empty((len(hof), self.max_length), dtype=np.int32)
         obs_action = np.empty((len(hof), self.max_length), dtype=np.int32)
